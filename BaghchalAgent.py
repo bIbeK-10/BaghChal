@@ -7,6 +7,7 @@ class Agent:
         self.score = 0
 
     def selectMove(self, goatMoves, tigerMoves):
+        np.random.seed(123)
         if self.role == 'G':
             index = np.random.randint(len(goatMoves))
             moveToMake = goatMoves[index]

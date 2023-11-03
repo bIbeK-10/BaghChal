@@ -33,6 +33,7 @@ def main():
     gs = BaghchalEngine.GameState()
 
     loadImages()
+    font = pg.font.Font('freesansbold.ttf', 32)
 
     # variables
     sqSelected = ()
@@ -102,16 +103,31 @@ def main():
 
         # bot vs bot
         if pvp == '00':
-            if gs.capturedGoats >= 5:    # game ends when more than 5 goats are captured
-                pvp = '11'
+            if gs.capturedGoats >= 10:    # game ends when more than 5 goats are captured
+                # pvp = '11'
+                # gs, validMoves = gs.restart()
+                # pg.time.delay(500)
                 continue
+
             if gs.goatToMove:
-                bestMove = PlayerGoat.selectMove(goatMoves=gs.goatValidMoves, tigerMoves=gs.tigerValidMoves)
-                if gs.unusedGoats !=0:
-                    gs.unusedGoats -= 1
+                if len(gs.goatValidMoves) == 0:
+                    print("No Possible Goat Moves")
+                    # pvp = '11'
+                    continue
+                else:
+                    bestMove = PlayerGoat.selectMove(goatMoves=gs.goatValidMoves, tigerMoves=gs.tigerValidMoves)
+                    if gs.unusedGoats !=0:
+                        gs.unusedGoats -= 1
 
             if not gs.goatToMove:
-                bestMove = PlayerTiger.selectMove(goatMoves=gs.goatValidMoves ,tigerMoves=gs.tigerValidMoves)
+                if len(gs.tigerValidMoves) == 0 :
+                    print("20 goats survived")
+                    print("Goat Won")
+                    gs, validMoves = gs.restart()
+                    pg.time.delay(500)
+                    continue
+                else:
+                    bestMove = PlayerTiger.selectMove(goatMoves=gs.goatValidMoves ,tigerMoves=gs.tigerValidMoves)
             move = BaghchalEngine.Move((bestMove[0], bestMove[1]),(bestMove[2],bestMove[3]), gs.board)
             gs.makeMove(move)
             moveMade = True
@@ -121,6 +137,8 @@ def main():
             moveMade = False
 
         drawGameState(screen, gs)
+        drawText(screen, font, str(gs.unusedGoats), (200, 750), pg.color.Color(0,100,0), False)
+        drawText(screen, font, str(gs.capturedGoats), (300, 750), pg.color.Color(200, 100, 10), True)
         clock.tick(MAX_FPS)
         pg.display.flip()
         pg.display.update()
@@ -137,6 +155,14 @@ def drawPieces(screen, board):
             piece = board[i][j]
             if piece != '.':
                 screen.blit(IMAGES[piece], pg.Rect(75+j*SEPARATION, 75+i*SEPARATION, 50, 50))
+
+def drawText(screen, font, text, position, color, bold):
+    if bold:
+        font.set_bold(10)
+    text = font.render(text, True, color, None)
+    textRect = text.get_rect()
+    textRect.center = position
+    screen.blit(text, textRect)
 
 if __name__ == "__main__":
     main()

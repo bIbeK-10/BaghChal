@@ -138,6 +138,10 @@ class GameState():
 
         return goatPosition, tigerPosition
 
+    def restart(self):
+        print("Game Restart")
+        return GameState(), self.getAllPosssibleMoves()
+
 
 class Move():
     # maps keys to values
