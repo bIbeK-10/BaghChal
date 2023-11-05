@@ -16,8 +16,8 @@ IMAGES = {}
 
 # Load Images at the beginning
 def loadImages():
-    IMAGES['B'] = pg.transform.scale(pg.image.load("Assets/tiger.png"), (50, 50))
-    IMAGES['G'] = pg.transform.scale(pg.image.load("Assets/goat.png"), (50, 50))
+    IMAGES['B'] = pg.transform.scale(pg.image.load("Assets/tiger_emoji.png"), (50, 50))
+    IMAGES['G'] = pg.transform.scale(pg.image.load("Assets/goat_emoji.png"), (50, 50))
     IMAGES['board'] = pg.transform.scale(pg.image.load("Assets/board2.png"), (700, 800))
 
 # main loop
@@ -26,14 +26,19 @@ def main():
     pg.init()
     screen = pg.display.set_mode((WIDTH, HEIGHT))
     pg.display.set_caption('Baghchal')
-    pg.display.set_icon(pg.image.load("Assets/goat.png"))
+    pg.display.set_icon(pg.image.load("Assets/tiger_emoji.png"))
     clock = pg.time.Clock()
+
+    # audio
+    pg.mixer.init()
+    goatSound = pg.mixer.music.load("Assets/sound/Goat-Baby-Bah-B-www.fesliyanstudios.com.mp3")
+    pg.mixer.music.set_volume(0.5)
 
     # GameState
     gs = BaghchalEngine.GameState()
 
     loadImages()
-    font = pg.font.Font('freesansbold.ttf', 32)
+    font = pg.font.Font('freesansbold.ttf', 24)
 
     # variables
     sqSelected = ()
@@ -46,10 +51,11 @@ def main():
     # game mode '11': player vs player, '00': bot vs bot
     pvp = '00'
     if pvp == '00':
-        PlayerGoat = BaghchalAgent.Agent('G')
-        PlayerTiger = BaghchalAgent.Agent('B')
+        PlayerGoat = BaghchalAgent.GoatAgent(gs.board)
+        PlayerTiger = BaghchalAgent.TigerAgent(gs.board)
 
     # main game loop
+    totalGamesPlayed = 0
     running = True
     while running:
 
@@ -88,6 +94,7 @@ def main():
                                 gs.makeMove(move)
                                 gs.unusedGoats = gs.unusedGoats - 1
                                 moveMade = True
+                                # pg.mixer.music.play(1)
                             sqSelected = []
                             playerClicks = []
 
@@ -100,34 +107,28 @@ def main():
                         sqSelected = []
                         playerClicks = []
 
-
         # bot vs bot
         if pvp == '00':
             if gs.capturedGoats >= 10:    # game ends when more than 5 goats are captured
                 # pvp = '11'
-                # gs, validMoves = gs.restart()
-                # pg.time.delay(500)
+                PlayerGoat.resetBoard()
+                gs, validMoves = gs.restart()
+                totalGamesPlayed += 1
+                # pg.time.delay(1000)
                 continue
 
             if gs.goatToMove:
-                if len(gs.goatValidMoves) == 0:
-                    print("No Possible Goat Moves")
-                    # pvp = '11'
-                    continue
-                else:
-                    bestMove = PlayerGoat.selectMove(goatMoves=gs.goatValidMoves, tigerMoves=gs.tigerValidMoves)
-                    if gs.unusedGoats !=0:
-                        gs.unusedGoats -= 1
+                bestMove = PlayerGoat.selectMove(goatMoves=gs.goatValidMoves, tigerMoves=[])
+                if gs.unusedGoats !=0:
+                    gs.unusedGoats -= 1
 
             if not gs.goatToMove:
                 if len(gs.tigerValidMoves) == 0 :
-                    print("20 goats survived")
-                    print("Goat Won")
                     gs, validMoves = gs.restart()
-                    pg.time.delay(500)
+                    pvp == '11'
                     continue
                 else:
-                    bestMove = PlayerTiger.selectMove(goatMoves=gs.goatValidMoves ,tigerMoves=gs.tigerValidMoves)
+                    bestMove = PlayerTiger.selectMove(goatMoves=[],tigerMoves=gs.tigerValidMoves)
             move = BaghchalEngine.Move((bestMove[0], bestMove[1]),(bestMove[2],bestMove[3]), gs.board)
             gs.makeMove(move)
             moveMade = True
@@ -136,13 +137,19 @@ def main():
             validMoves = gs.getAllPosssibleMoves()
             moveMade = False
 
+
         drawGameState(screen, gs)
+        # render texts
         drawText(screen, font, str(gs.unusedGoats), (200, 750), pg.color.Color(0,100,0), False)
         drawText(screen, font, str(gs.capturedGoats), (300, 750), pg.color.Color(200, 100, 10), True)
+        drawText(screen, font, str(totalGamesPlayed), (100, 750), pg.color.Color(255, 255, 255), True)
+        if pvp == '00':
+            drawText(screen, font, str(PlayerGoat.score), (200, 775), pg.color.Color(0,100,0), False)
+            drawText(screen, font, str(PlayerTiger.score), (300, 775), pg.color.Color(200, 100, 10), True)
+
         clock.tick(MAX_FPS)
         pg.display.flip()
         pg.display.update()
-        # pygame.time.wait(1000)
 
 def drawGameState(screen, gs):
     # draw background

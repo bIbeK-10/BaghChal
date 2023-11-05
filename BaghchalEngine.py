@@ -22,7 +22,7 @@ class GameState():
         self.lastGoatMove = [(-1,-1),(-1,-1)]
         self.lastTigerMove = [(-1,-1),(-1,-1)]
 
-        self.goatCaptured = False
+        self.isGoatCaptured = False
         self.capturedGoats = 0          # total number of goat captured by tiger
         self.goatValidMoves = []
         self.tigerValidMoves = []
@@ -31,13 +31,13 @@ class GameState():
         if not self.goatToMove:
             stride = (np.abs(move.startRow - move.endRow),np.abs(move.startCol-move.endCol))
             if stride in G.DOUBLESTEP:
-                self.goatCaptured = True
+                self.isGoatCaptured = True
 
-        if self.goatCaptured:
+        if self.isGoatCaptured:
             capturePos = [(move.startRow + move.endRow)//2,(move.startCol + move.endCol)//2]
             self.board[capturePos[0]][capturePos[1]] = '.'
             self.capturedGoats += 1
-            self.goatCaptured = False
+            self.isGoatCaptured = False
 
         self.board[move.startRow][move.startCol] = '.'
         self.board[move.endRow][move.endCol] = move.pieceMoved
@@ -139,8 +139,8 @@ class GameState():
         return goatPosition, tigerPosition
 
     def restart(self):
-        print("Game Restart")
-        return GameState(), self.getAllPosssibleMoves()
+        newState = GameState()
+        return newState, newState.getAllPosssibleMoves()
 
 
 class Move():
