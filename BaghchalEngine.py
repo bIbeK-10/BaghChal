@@ -6,14 +6,14 @@ import GRAPH as G
 class GameState():
 
     def __init__(self):
-        # '.' represents empty space, 'B' for Tiger and 'G' for Goat.
+        # '.' represents empty space, 'T' for Tiger and 'G' for Goat.
 
         self.board = np.array([  # initial state of the board
-            ['B', '.', '.', '.', 'B'],
+            ['T', '.', '.', '.', 'T'],
             ['.', '.', '.', '.', '.'],
             ['.', '.', '.', '.', '.'],
             ['.', '.', '.', '.', '.'],
-            ['B', '.', '.', '.', 'B']
+            ['T', '.', '.', '.', 'T']
         ])
 
         self.goatToMove = True
@@ -24,26 +24,27 @@ class GameState():
 
         self.isGoatCaptured = False
         self.capturedGoats = 0          # total number of goat captured by tiger
-        self.goatValidMoves = []
+        self.goatValidMoves = self.getAllGoatMoves()
         self.tigerValidMoves = []
 
     def makeMove(self, move):
         if not self.goatToMove:
-            stride = (np.abs(move.startRow - move.endRow),np.abs(move.startCol-move.endCol))
+            stride = (np.abs(move.startRow - move.endRow), np.abs(move.startCol-move.endCol))
             if stride in G.DOUBLESTEP:
                 self.isGoatCaptured = True
 
         if self.isGoatCaptured:
-            capturePos = [(move.startRow + move.endRow)//2,(move.startCol + move.endCol)//2]
+            capturePos = [(move.startRow + move.endRow)//2, (move.startCol + move.endCol)//2]
             self.board[capturePos[0]][capturePos[1]] = '.'
             self.capturedGoats += 1
             self.isGoatCaptured = False
 
         self.board[move.startRow][move.startCol] = '.'
         self.board[move.endRow][move.endCol] = move.pieceMoved
-        if move.pieceMoved == '.':
+
+        if (move.startRow, move.startCol) == (move.endRow, move.endCol):
             self.board[move.endRow][move.endCol] = 'G'
-        self.moveLog.append(move)
+            self.unusedGoats -= 1
 
         if self.goatToMove:
             self.lastGoatMove = [(move.startRow,move.startCol), (move.endRow, move.endCol)]
@@ -52,96 +53,172 @@ class GameState():
 
         self.goatToMove = not self.goatToMove
 
-    def undoMove(self):
-        if len(self.moveLog) != 0:
-            move = self.moveLog.pop()
-            self.board[move.startRow][move.startCol] = move.pieceMoved
-            self.board[move.endRow][move.endCol] = move.pieceCaptured
-            self.goatToMove = not self.goatToMove  # switch turn back
-
-    def getAllPosssibleMoves(self):
+    def getAllGoatMoves(self):
         moves = []
-        self.goatValidMoves = []
-        self.tigerValidMoves = []
 
-        piecePositions = self.piecesPos()
-
+        goatPos, tigerPos = self.piecesPos()
         for i in range(self.board.shape[0]):
             for j in range(self.board.shape[1]):
+                if self.board[i][j] == '.' and self.unusedGoats !=0:
+                    if [(i, j), (i, j)] != self.lastGoatMove:  # repeating move not allowed
+                        moves.append([i, j, i, j])
 
-                piece = self.board[i][j]
-                if self.goatToMove:
-                    if piece == '.' and self.unusedGoats !=0:
-                        self.getNewGoat(i, j, moves)
-                    elif piece == 'G' and self.unusedGoats ==0:
-                        self.getGoatMoves(i, j, moves, piecePositions[0], piecePositions[1])
+                elif self.board[i][j] == 'G' and self.unusedGoats ==0:
+                    connectedNodes = G.GRAPH1[(i, j)]
+                    EmptyNodes = [node for node in connectedNodes if (node not in goatPos) and (node not in tigerPos)]
 
-                elif not self.goatToMove and piece == 'B':
-                    self.getTigerMoves(i, j, moves, piecePositions[0], piecePositions[1])
+                    if self.lastGoatMove[0] in EmptyNodes:  # not allowed to repeat move
+                        if self.lastGoatMove[1] == (i, j):
+                            EmptyNodes.remove(self.lastGoatMove[0])
 
+                    for node in EmptyNodes:
+                        moves.append([i, j, node[0], node[1]])
+
+        self.goatValidMoves = moves
         return moves
 
-    # move a new goat piece to the board
-    def getNewGoat(self, i, j, moves):
-        if [(i, j), (i, j)] == self.lastGoatMove: # repeating move not allowed
-            return
-        moves.append(Move((i, j), (i, j), self.board))
-        self.goatValidMoves.append([i, j, i, j])
+    def getAllTigerMoves(self):
+        moves = []
 
-    # moves of an existing goat piece on the board
-    def getGoatMoves(self, i, j, moves, goatPos, tigerPos):
-        connectedNodes = G.GRAPH1[(i,j)]
-        EmptyNodes = [node for node in connectedNodes if (node not in goatPos) and (node not in tigerPos)]
+        goatPos, tigerPos = self.piecesPos()
+        for i in range(self.board.shape[0]):
+            for j in range(self.board.shape[1]):
+                if self.board[i][j] == 'T':
+                    connectedNodes = []
+                    for node in G.GRAPH1[(i, j)]:
+                        if node not in goatPos and node not in tigerPos:  # not allowed to repeat move
+                            connectedNodes.append(node)
 
-        if self.lastGoatMove[0] in EmptyNodes:  # not allowed to repeat move
-            if self.lastGoatMove[1] == (i,j):
-                EmptyNodes.remove(self.lastGoatMove[0])
+                    if self.lastTigerMove[0] in connectedNodes:
+                        if self.lastTigerMove[1] == (i, j):
+                            connectedNodes.remove(self.lastTigerMove[0])
 
-        for node in EmptyNodes:
-            self.goatValidMoves.append([i,j,node[0],node[1]])
-            moves.append(Move((i,j),node,self.board))
+                    # tiger jumping criteria
+                    doubleStep = G.GRAPH2[(i, j)]
+                    validDoubleSteps = []
+                    for nextPos in doubleStep:
+                        row, col = (i + nextPos[0]) // 2, (j + nextPos[1]) // 2
+                        if self.board[row][col] == 'G' and self.board[nextPos[0]][nextPos[1]] == '.':
+                            validDoubleSteps.append(nextPos)
 
-    # moves of the tiger on the board
-    def getTigerMoves(self, i, j, moves, goatPos, tigerPos):
+                    possibleNodes = connectedNodes + validDoubleSteps
+                    for node in possibleNodes:
+                        moves.append([i, j, node[0], node[1]])
 
-        connectedNodes = []
-        for node in G.GRAPH1[(i,j)]:
-            if node not in goatPos and node not in tigerPos:    # not allowed to repeat move
-                connectedNodes.append(node)
+        self.tigerValidMoves = moves
+        return moves
 
-        if self.lastTigerMove[0] in connectedNodes:
-            if self.lastTigerMove[1] == (i, j):
-                connectedNodes.remove(self.lastTigerMove[0])
+    def getNextGoatMoves(self):
+        nextGoatMoves = []
+        tigerValidMoves = getNextTigerMoves(self.board, self.lastTigerMove)
 
-        # tiger jumping criteria
-        doubleStep = G.GRAPH2[(i,j)]
-        validDoubleSteps = []
-        for nextPos in doubleStep:
-            row, col = (i+nextPos[0])//2,(j+nextPos[1])//2
-            if self.board[row][col] == 'G' and self.board[nextPos[0]][nextPos[1]] == '.':
-                validDoubleSteps.append(nextPos)
+        for move in tigerValidMoves:
+            board = self.board.copy()
 
-        possibleNodes = connectedNodes + validDoubleSteps
-        for node in possibleNodes:
-            self.tigerValidMoves.append([i,j,node[0],node[1]])
-            moves.append(Move((i,j),node,self.board))
+            board[move[0]][move[1]] = '.'
+            board[move[2]][move[3]] = 'T'
+            if (np.abs(move[0]-move[2]), np.abs(move[1]-move[3])) in G.DOUBLESTEP:
+                board[(move[0] + move[2])//2][(move[1] + move[3])//2] = '.'
+
+            moves = getNextGoatMoves(board, self.unusedGoats, self.lastGoatMove)
+            for move in moves:
+                if move not in nextGoatMoves:
+                    nextGoatMoves.append(move)
+
+        return nextGoatMoves
+
+    def getNextTigerMoves(self):
+        nextTigerMoves = []
+        goatValidMoves = getNextGoatMoves(self.board, self.unusedGoats, self.lastGoatMove)
+
+        for move in goatValidMoves:
+            board = self.board.copy()
+            board[move[0]][move[1]] = '.'
+            board[move[2]][move[3]] = 'G'
+
+            moves = getNextTigerMoves(board,self.lastTigerMove)
+            for move in moves:
+                if move not in nextTigerMoves:
+                    nextTigerMoves.append(move)
+
+        return nextTigerMoves
 
     def piecesPos(self):
         goatPosition = []
         tigerPosition = []
         for i in range(self.board.shape[0]):
             for j in range(self.board.shape[1]):
-                if self.board[i][j] == 'B':
+                if self.board[i][j] == 'T':
                     tigerPosition.append((i,j))
                 elif self.board[i][j] == 'G':
                     goatPosition.append((i,j))
-
         return goatPosition, tigerPosition
 
     def restart(self):
         newState = GameState()
-        return newState, newState.getAllPosssibleMoves()
+        return newState
 
+def getNextGoatMoves(board, unusedGoats, lastGoatMove):
+    moves = []
+
+    goatPos, tigerPos = piecesPos(board)
+    for i in range(board.shape[0]):
+        for j in range(board.shape[1]):
+            if board[i][j] == '.' and unusedGoats != 0:
+                if [(i, j), (i, j)] != lastGoatMove:  # repeating move not allowed
+                    moves.append([i, j, i, j])
+            elif board[i][j] == 'G' and unusedGoats == 0:
+                connectedNodes = G.GRAPH1[(i, j)]
+                EmptyNodes = [node for node in connectedNodes if (node not in goatPos) and (node not in tigerPos)]
+
+                if lastGoatMove[0] in EmptyNodes:  # not allowed to repeat move
+                    if lastGoatMove[1] == (i, j):
+                        EmptyNodes.remove(lastGoatMove[0])
+
+                for node in EmptyNodes:
+                    moves.append([i, j, node[0], node[1]])
+    return moves
+
+def getNextTigerMoves(board, lastTigerMove):
+    moves = []
+
+    goatPos, tigerPos = piecesPos(board)
+    for i in range(board.shape[0]):
+        for j in range(board.shape[1]):
+            if board[i][j] == 'T':
+                connectedNodes = []
+                for node in G.GRAPH1[(i, j)]:
+                    if node not in goatPos and node not in tigerPos:  # not allowed to repeat move
+                        connectedNodes.append(node)
+
+                if lastTigerMove[0] in connectedNodes:
+                    if lastTigerMove[1] == (i, j):
+                        connectedNodes.remove(lastTigerMove[0])
+
+                # tiger jumping criteria
+                doubleStep = G.GRAPH2[(i, j)]
+                validDoubleSteps = []
+                for nextPos in doubleStep:
+                    row, col = (i + nextPos[0]) // 2, (j + nextPos[1]) // 2
+                    if board[row][col] == 'G' and board[nextPos[0]][nextPos[1]] == '.':
+                        validDoubleSteps.append(nextPos)
+
+                possibleNodes = connectedNodes + validDoubleSteps
+                for node in possibleNodes:
+                    moves.append([i, j, node[0], node[1]])
+
+    return moves
+
+def piecesPos(board):
+    goatPosition = []
+    tigerPosition = []
+    for i in range(board.shape[0]):
+        for j in range(board.shape[1]):
+            if board[i][j] == 'T':
+                tigerPosition.append((i,j))
+            elif board[i][j] == 'G':
+                goatPosition.append((i,j))
+    return goatPosition, tigerPosition
 
 class Move():
     # maps keys to values

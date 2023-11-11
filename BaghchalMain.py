@@ -10,13 +10,12 @@ WIDTH = 700
 HEIGHT = 800
 DIMENSION = 5  # 5x5 board
 SEPARATION = 125
-MAX_FPS = 1
-
-IMAGES = {}
+MAX_FPS = 10
 
 # Load Images at the beginning
+IMAGES = {}
 def loadImages():
-    IMAGES['B'] = pg.transform.scale(pg.image.load("Assets/tiger_emoji.png"), (50, 50))
+    IMAGES['T'] = pg.transform.scale(pg.image.load("Assets/tiger_emoji.png"), (50, 50))
     IMAGES['G'] = pg.transform.scale(pg.image.load("Assets/goat_emoji.png"), (50, 50))
     IMAGES['board'] = pg.transform.scale(pg.image.load("Assets/board2.png"), (700, 800))
 
@@ -24,28 +23,24 @@ def loadImages():
 def main():
     # initialize pygame
     pg.init()
+    clock = pg.time.Clock()
     screen = pg.display.set_mode((WIDTH, HEIGHT))
     pg.display.set_caption('Baghchal')
     pg.display.set_icon(pg.image.load("Assets/tiger_emoji.png"))
-    clock = pg.time.Clock()
-
-    # audio
-    pg.mixer.init()
-    goatSound = pg.mixer.music.load("Assets/sound/Goat-Baby-Bah-B-www.fesliyanstudios.com.mp3")
-    pg.mixer.music.set_volume(0.5)
 
     # GameState
     gs = BaghchalEngine.GameState()
 
+    # setup image and font
     loadImages()
     font = pg.font.Font('freesansbold.ttf', 24)
 
-    # variables
+    # variables to hold player moves
     sqSelected = ()
     playerClicks = []
     notations = []
+
     # track moves
-    validMoves = gs.getAllPosssibleMoves()
     moveMade = False
 
     # game mode '11': player vs player, '00': bot vs bot
@@ -53,12 +48,26 @@ def main():
     if pvp == '00':
         PlayerGoat = BaghchalAgent.GoatAgent(gs.board)
         PlayerTiger = BaghchalAgent.TigerAgent(gs.board)
+        BaghchalAgent.train(PlayerGoat, PlayerTiger, 10)
+
+        file = open("q_table_goat.txt", "w")
+        file.write(str(PlayerGoat.Q_table))
+        file.close()
+
+        file2 = open("q_table_tiger.txt", "w")
+        file2.write(str(PlayerTiger.Q_table))
+        file2.close()
+
+        file = open("game.play", 'w')
+
+    # pvp = '10' : player vs bot
+    playerTurn = False
+
 
     # main game loop
     totalGamesPlayed = 0
     running = True
     while running:
-
         for event in pg.event.get():
             if event.type == pg.QUIT:
                 running = False
@@ -94,7 +103,6 @@ def main():
                                 gs.makeMove(move)
                                 gs.unusedGoats = gs.unusedGoats - 1
                                 moveMade = True
-                                # pg.mixer.music.play(1)
                             sqSelected = []
                             playerClicks = []
 
@@ -109,34 +117,88 @@ def main():
 
         # bot vs bot
         if pvp == '00':
-            if gs.capturedGoats >= 10:    # game ends when more than 5 goats are captured
-                # pvp = '11'
-                PlayerGoat.resetBoard()
-                gs, validMoves = gs.restart()
+            if totalGamesPlayed > 50:
+                pvp = '10'
+                continue
+
+            if gs.capturedGoats >= 5:    # game ends when more than 5 goats are captured
+                file.write("Tiger Won\n")
+                PlayerGoat.reset_board()
+                gs = gs.restart()
                 totalGamesPlayed += 1
-                # pg.time.delay(1000)
+                PlayerTiger.score += 1
                 continue
 
             if gs.goatToMove:
-                bestMove = PlayerGoat.selectMove(goatMoves=gs.goatValidMoves, tigerMoves=[])
-                if gs.unusedGoats !=0:
-                    gs.unusedGoats -= 1
+                bestMove = PlayerGoat.select_move(gs.getAllGoatMoves())
 
             if not gs.goatToMove:
                 if len(gs.tigerValidMoves) == 0 :
-                    gs, validMoves = gs.restart()
-                    pvp == '11'
+                    file.write("Goat Won \n")
+                    gs = gs.restart()
+                    totalGamesPlayed += 1
+                    PlayerGoat.score += 1
                     continue
                 else:
-                    bestMove = PlayerTiger.selectMove(goatMoves=[],tigerMoves=gs.tigerValidMoves)
+                    bestMove = PlayerTiger.select_move(gs.tigerValidMoves)
             move = BaghchalEngine.Move((bestMove[0], bestMove[1]),(bestMove[2],bestMove[3]), gs.board)
+
+
             gs.makeMove(move)
+            if gs.goatToMove:
+                file.write("Goat move: \n" + str(gs.board) + '\n\n')
+            elif not gs.goatToMove:
+                file.write("Tiger move: \n" + str(gs.board) + '\n\n')
             moveMade = True
 
-        if moveMade:
-            validMoves = gs.getAllPosssibleMoves()
-            moveMade = False
+        if pvp == '10':
+            if playerTurn:
+                # player as tiger
+                # print("Player Move")
 
+                if event.type == pg.MOUSEBUTTONDOWN:
+                    location = pg.mouse.get_pos()
+                    col = location[0] // SEPARATION
+                    row = location[1] // SEPARATION
+
+                    if sqSelected == (row, col):
+                        sqSelected = []
+                        playerClicks = []
+                    else:
+                        sqSelected = (row, col)
+                        playerClicks.append(sqSelected)
+
+                    if (gs.board[row][col] == '.') and (len(playerClicks) == 1):
+                        sqSelected = []
+                        playerClicks = []
+
+                    if len(playerClicks) == 2:
+                        move = [playerClicks[0][0], playerClicks[0][1], playerClicks[1][0], playerClicks[1][1]]
+                        if move in validMoves:
+                            gs.makeMove(BaghchalEngine.Move((move[0], move[1]),(move[2], move[3]), gs.board))
+                            playerTurn = not playerTurn
+                            moveMade = True
+                        sqSelected = []
+                        playerClicks = []
+
+            elif not playerTurn:
+                pg.time.delay(1000)
+                bestMove = PlayerGoat.maxQmove(gs.getAllGoatMoves())
+                gs.makeMove(BaghchalEngine.Move((bestMove[0], bestMove[1]),(bestMove[2],bestMove[3]), gs.board))
+                playerTurn = not playerTurn
+                moveMade = True
+
+            if gs.capturedGoats >= 5:
+                PlayerGoat.reset_board()
+                gs = gs.restart()
+                continue
+
+        if moveMade:
+            if gs.goatToMove:
+                validMoves = gs.getAllGoatMoves()
+            else:
+                validMoves = gs.getAllTigerMoves()
+            moveMade = False
 
         drawGameState(screen, gs)
         # render texts
@@ -150,6 +212,7 @@ def main():
         clock.tick(MAX_FPS)
         pg.display.flip()
         pg.display.update()
+    file.close()
 
 def drawGameState(screen, gs):
     # draw background

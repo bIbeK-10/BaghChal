@@ -1,3 +1,6 @@
 .idea
 .vs
 __pycache__
+game.play
+q_table_goat.txt
+q_table_tiger.txt
