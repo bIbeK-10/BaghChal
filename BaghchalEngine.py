@@ -108,27 +108,26 @@ class GameState():
         self.tigerValidMoves = moves
         return moves
 
-    def getNextGoatMoves(self):
-        nextGoatMoves = []
-        tigerValidMoves = getNextTigerMoves(self.board, self.lastTigerMove)
+    def getNextGoatState_n_Actions(self, tigermove):
+        nextState_n_Actions = []
+        move = tigermove
 
-        for move in tigerValidMoves:
-            board = self.board.copy()
+        board = self.board.copy()
 
-            board[move[0]][move[1]] = '.'
-            board[move[2]][move[3]] = 'T'
-            if (np.abs(move[0]-move[2]), np.abs(move[1]-move[3])) in G.DOUBLESTEP:
-                board[(move[0] + move[2])//2][(move[1] + move[3])//2] = '.'
+        board[move[0]][move[1]] = '.'
+        board[move[2]][move[3]] = 'T'
+        if (np.abs(move[0]-move[2]), np.abs(move[1]-move[3])) in G.DOUBLESTEP:
+            board[(move[0] + move[2])//2][(move[1] + move[3])//2] = '.'
 
-            moves = getNextGoatMoves(board, self.unusedGoats, self.lastGoatMove)
-            for move in moves:
-                if move not in nextGoatMoves:
-                    nextGoatMoves.append(move)
+        moves = getNextGoatMoves(board, self.unusedGoats, self.lastGoatMove)
+        for move in moves:
+            nextState_n_Actions.append((board, move))
 
-        return nextGoatMoves
+        return nextState_n_Actions
 
-    def getNextTigerMoves(self):
-        nextTigerMoves = []
+    def getNextTigerState_n_Actions(self):
+        nextState_n_Actions = []
+
         goatValidMoves = getNextGoatMoves(self.board, self.unusedGoats, self.lastGoatMove)
 
         for move in goatValidMoves:
@@ -138,10 +137,9 @@ class GameState():
 
             moves = getNextTigerMoves(board,self.lastTigerMove)
             for move in moves:
-                if move not in nextTigerMoves:
-                    nextTigerMoves.append(move)
+                nextState_n_Actions.append((board, move))
 
-        return nextTigerMoves
+        return nextState_n_Actions
 
     def piecesPos(self):
         goatPosition = []

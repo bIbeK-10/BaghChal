@@ -13,8 +13,8 @@ class GoatAgent:
         self.current_board_state = board
         self.Q_table = {}
         self.totalGamesPlayed = 0
-        self.nextValidMoves = []
-        self.epsilon = 1
+        self.nextState_n_Actions = []
+        self.epsilon = 0.4
 
     def select_move(self, goat_moves):
         # Implement a reinforcement learning algorithm to select the best move.
@@ -46,17 +46,18 @@ class GoatAgent:
     def reset_board(self):
         self.goat_count = 0
 
-    def update_Q_table(self, reward, next_state, action, alpha=0.1, gamma=0.9):
+    def update_Q_table(self, reward, action, alpha=0.1, gamma=0.9):
         # Implement the Q-learning update rule.
 
         self.score += reward
         current_Q = self.Q_table.get(self.getState_n_Action(self.current_board_state, action), 0)
         max_next_Q = 0
-        gs.getAllGoatMoves()
-        for next_move in self.nextValidMoves:
-            next_Q = self.Q_table.get(self.getState_n_Action(next_state, next_move), 0)
+
+        for nextState in self.nextState_n_Actions:
+            next_Q = self.Q_table.get(self.getState_n_Action(nextState[0], nextState[1]), 0)
             max_next_Q = max(max_next_Q, next_Q)
 
+        # print(max_next_Q)
         new_Q = current_Q + alpha * (reward + gamma * max_next_Q - current_Q)
         self.Q_table[self.getState_n_Action(self.current_board_state, action)] = new_Q
 
@@ -142,7 +143,7 @@ class GoatAgent:
         return (currentState, str(move[0]) + str(move[1]) + str(move[2]) + str(move[3]))
 
     def updateEpsilon(self):
-        if self.totalGamesPlayed % 1000 == 0 and self.epsilon > 0.2:
+        if self.totalGamesPlayed % 100 == 0 and self.epsilon > 0.2:
             self.epsilon -= 0.05
 
 class TigerAgent:
@@ -152,7 +153,7 @@ class TigerAgent:
         self.current_board_state = board
         self.capturedGoats = 0
         self.Q_table = {}
-        self.nextValidMoves = []
+        self.nextState_n_Actions = []
 
     def select_move(self, tiger_moves):
         # Implement a reinforcement learning algorithm to select the best move.
@@ -187,16 +188,17 @@ class TigerAgent:
                 move_to_make = move
         return move_to_make
 
-    def update_Q_table(self, reward, next_state, action, alpha=0.1, gamma=0.9):
+    def update_Q_table(self, reward, action, alpha=0.1, gamma=0.9):
         # Implement the Q-learning update rule.
         self.score += reward
         current_Q = self.Q_table.get(self.getState_n_Action(self.current_board_state, action), 0)
         max_next_Q = 0
 
-        for next_move in self.nextValidMoves:
-            next_Q = self.Q_table.get(self.getState_n_Action(next_state, next_move), 0)
+        for i in range(len(self.nextState_n_Actions)):
+            next_Q = self.Q_table.get(self.getState_n_Action(self.nextState_n_Actions[i][0], self.nextState_n_Actions[i][1]), 0)
             max_next_Q = max(max_next_Q, next_Q)
 
+        # print(max_next_Q)
         new_Q = current_Q + alpha * (reward + gamma * max_next_Q - current_Q)
         self.Q_table[self.getState_n_Action(self.current_board_state, action)] = new_Q
 
@@ -292,7 +294,7 @@ def train(goat_agent, tiger_agent, num_episodes = 1):
     # episode = 0
     # while goat_wins < 5:
     for episode in range(num_episodes):
-        if episode % 1000 == 0:
+        if episode % 100 == 0:
             currentTime = (datetime.now()).strftime('%H:%M:%S.%f')
             print(f"Iteration {episode} : {currentTime} : exploration rate: {goat_agent.epsilon}")
         # episode += 1
@@ -306,46 +308,39 @@ def train(goat_agent, tiger_agent, num_episodes = 1):
         goat_to_move = True
         previous_tiger_moves = []
         while True:
-            # Get the goat's move.
-
             reward = {'goat':0, 'tiger':0}
+
             goat_moves = gs.getAllGoatMoves()
             goat_agent.current_board_state = gs.board
             goat_move = []
-
-
             if goat_to_move:
                 goat_move = goat_agent.select_move(goat_moves)
-                # make move
                 gs.makeMove(BaghchalEngine.Move((goat_move[0], goat_move[1]),(goat_move[2], goat_move[3]), gs.board))
                 goat_to_move = False
                 per_round += 1
-
-            # compute next valid moves for goat
-            goat_agent.nextValidMoves = gs.getNextGoatMoves()
 
             # Get the tiger's move.
             tiger_moves = gs.getAllTigerMoves()
             tiger_agent.current_board_state = gs.board
             tiger_move = []
-
             if not goat_to_move and len(tiger_moves) != 0:
                 tiger_move = tiger_agent.select_move(tiger_moves)
-
-                # Update the board state.
                 gs.makeMove(BaghchalEngine.Move((tiger_move[0], tiger_move[1]), (tiger_move[2], tiger_move[3]), gs.board))
                 goat_to_move = True
                 per_round += 1
 
-            # compute next valid moves for tiger
-            tiger_agent.nextValidMoves = gs.getNextTigerMoves()
+            if len(tiger_move) == 0:
+                tiger_move = [2, 2, 2, 2]
+
+            goat_agent.nextState_n_Actions = gs.getNextGoatState_n_Actions(tiger_move)
+            tiger_agent.nextState_n_Actions = gs.getNextTigerState_n_Actions()
 
             # reward every turn
             if per_round == 2:
                 per_round = 0
                 # if goat is captured, reward tiger and penalize goat.
                 if tiger_agent.isDoubleStep(tiger_move):
-                    reward['goat'] += -1.5
+                    reward['goat'] += -1
                     reward['tiger'] += 1
 
                 # else, since goat survived, reward goat by small amount.
@@ -355,41 +350,37 @@ def train(goat_agent, tiger_agent, num_episodes = 1):
                     # if goat occupied tiger capture positions, reward goat
                     for move in previous_tiger_moves:
                         if tiger_agent.isDoubleStep(move) and goat_move[2:4] == move[2:4]:
-                            reward['goat'] += 2
-                        else:   # penalize goat for not choosing that move
+                            reward['goat'] += 1
+                        else:  # penalize goat for not choosing that move
                             reward['goat'] += -1
 
                     # if piece placed in a corner, give points
                     if goat_move[2:4] in G.CORNERS:
                         reward['goat'] += 1
 
+
             # Check if the goat has won.
             if len(tiger_moves) == 0 and not goat_to_move:
-                tiger_move = [2, 2, 2, 2]
                 reward['goat'] += 1
                 reward['tiger'] += -1
-                if gs.unusedGoats > 15:     # if more than 15 goats used, reward the goat
+                if gs.unusedGoats > 15:  # if more than 15 goats used, reward the goat
                     reward['goat'] += 1
                 goat_wins += 1
+                gs= gs.restart()
                 nextRound = True
 
             # Check if the tiger has won.
             if tiger_agent.capturedGoats >= 5:
                 reward['goat'] += -1
                 reward['tiger'] += 1
-                if gs.unusedGoats > 15:     # if more than 15 goats used, reward the goat
-                    reward['goat'] += 4
                 gs= gs.restart()
+                # print("Tiger Won")
                 nextRound = True
 
-            goat_agent.update_Q_table(reward['goat'], tiger_agent.current_board_state, goat_move)
-            tiger_agent.update_Q_table(reward['tiger'], gs.board, tiger_move)
-            previous_tiger_moves = tiger_moves
+            goat_agent.update_Q_table(reward['goat'], goat_move)
+            tiger_agent.update_Q_table(reward['tiger'], tiger_move)
 
-            # backpropagate final outcome rewards and penalties
             if nextRound:
-                goat_agent.update_Q_table(reward['goat'], tiger_agent.current_board_state, goat_move)
-                tiger_agent.update_Q_table(reward['tiger'], gs.board, tiger_move)
                 tiger_agent.capturedGoats = 0
                 goat_agent.totalGamesPlayed += 1
                 goat_agent.updateEpsilon()
